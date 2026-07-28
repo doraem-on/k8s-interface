@@ -205,6 +205,18 @@ func GetDescribeRepositoriesEKS(eksSupport IEKSSupport, cluster string, region s
 	return repositoriesInfo, nil
 }
 
+func GetDescribeRepositoriesGKE(gkeSupport IGKESupport, cluster string, project string, region string) (*CloudProviderDescribeRepositories, error) {
+	return nil, fmt.Errorf("GetDescribeRepositoriesGKE not implemented yet")
+}
+
+func GetDescribeRepositoriesAKS(aksSupport IAKSSupport, cluster string, subscriptionId string, resourceGroup string) (*CloudProviderDescribeRepositories, error) {
+	return nil, fmt.Errorf("GetDescribeRepositoriesAKS not implemented yet")
+}
+
+func GetListEntitiesForPoliciesGKE(gkeSupport IGKESupport, cluster string, project string) (*CloudProviderListEntitiesForPolicies, error) {
+	return nil, fmt.Errorf("GetListEntitiesForPoliciesGKE not implemented yet")
+}
+
 // ============================== ClusterDescribe ==============================
 
 // Get descriptive info about cluster running in EKS.

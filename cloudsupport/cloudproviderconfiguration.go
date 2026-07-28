@@ -131,11 +131,33 @@ func GetDescribeRepositoriesFromCloudProvider(cluster string, cloudProvider stri
 			return nil, err
 		}
 	case cloudsupportv1.GKE:
-		//TODO - implement GKE support
-		return nil, fmt.Errorf(cloudsupportv1.NotSupportedMsg)
+		gkeSupport := cloudsupportv1.NewGKESupport()
+		project, err := gkeSupport.GetProject(cluster)
+		if err != nil {
+			return nil, err
+		}
+		region, err := gkeSupport.GetRegion(cluster)
+		if err != nil {
+			return nil, err
+		}
+		clusterInfo, err = cloudsupportv1.GetDescribeRepositoriesGKE(gkeSupport, cluster, project, region)
+		if err != nil {
+			return nil, err
+		}
 	case cloudsupportv1.AKS:
-		//TODO - implement AKS support
-		return nil, fmt.Errorf(cloudsupportv1.NotSupportedMsg)
+		aksSupport := cloudsupportv1.NewAKSSupport()
+		subscriptionID, err := aksSupport.GetSubscriptionID()
+		if err != nil {
+			return nil, err
+		}
+		resourceGroup, err := aksSupport.GetResourceGroup()
+		if err != nil {
+			return nil, err
+		}
+		clusterInfo, err = cloudsupportv1.GetDescribeRepositoriesAKS(aksSupport, cluster, subscriptionID, resourceGroup)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf(cloudsupportv1.NotSupportedMsg)
 	}
@@ -163,8 +185,15 @@ func GetListEntitiesForPoliciesFromCloudProvider(cluster string, cloudProvider s
 			return nil, err
 		}
 	case cloudsupportv1.GKE:
-		//TODO - implement GKE support
-		return nil, fmt.Errorf(cloudsupportv1.NotSupportedMsg)
+		gkeSupport := cloudsupportv1.NewGKESupport()
+		project, err := gkeSupport.GetProject(cluster)
+		if err != nil {
+			return nil, err
+		}
+		listEntitiesForPolicies, err = cloudsupportv1.GetListEntitiesForPoliciesGKE(gkeSupport, cluster, project)
+		if err != nil {
+			return nil, err
+		}
 	case cloudsupportv1.AKS:
 		aksSupport := cloudsupportv1.NewAKSSupport()
 		subscriptionID, err := aksSupport.GetSubscriptionID()
