@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	container "cloud.google.com/go/container/apiv1"
@@ -33,13 +34,18 @@ var (
 	KS_GKE_PROJECT_ENV_VAR = "KS_GKE_PROJECT"
 )
 
+const (
+	gkeCallTimeout            = 5 * time.Second
+	gkeRBACEnumerationTimeout = 30 * time.Second
+)
+
 func NewGKESupport() *GKESupport {
 	return &GKESupport{}
 }
 
 func (gkeSupport *GKESupport) GetRegion(cluster string) (string, error) {
 	region, present := os.LookupEnv(KS_GKE_REGION_ENV_VAR)
-	if present {
+	if present && strings.TrimSpace(region) != "" {
 		return region, nil
 	}
 	parsedName := strings.Split(cluster, "_")
@@ -52,7 +58,8 @@ func (gkeSupport *GKESupport) GetRegion(cluster string) (string, error) {
 
 // GetDescribeRepositories returns a list of GCP Artifact Registries in the given project and region
 func (gkeSupport *GKESupport) GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), gkeCallTimeout)
+	defer cancel()
 
 	client, err := artifactregistry.NewClient(ctx)
 	if err != nil {
@@ -84,17 +91,29 @@ func (gkeSupport *GKESupport) GetDescribeRepositories(project string, region str
 
 // GetListEntitiesForPolicies returns a list of IAM roles in the given project
 func (gkeSupport *GKESupport) GetListEntitiesForPolicies(project string) ([]*iam.Role, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), gkeRBACEnumerationTimeout)
+	defer cancel()
+
 	service, err := iam.NewService(ctx)
 	if err != nil {
 		return nil, err
 	}
 	
-	parent := fmt.Sprintf("projects/%s", project)
 	var roles []*iam.Role
 
-	req := service.Projects.Roles.List(parent)
-	if err := req.Pages(ctx, func(page *iam.ListRolesResponse) error {
+	// 1. Fetch predefined roles
+	reqPredefined := service.Roles.List()
+	if err := reqPredefined.Pages(ctx, func(page *iam.ListRolesResponse) error {
+		roles = append(roles, page.Roles...)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	// 2. Fetch project custom roles
+	parent := fmt.Sprintf("projects/%s", project)
+	reqCustom := service.Projects.Roles.List(parent)
+	if err := reqCustom.Pages(ctx, func(page *iam.ListRolesResponse) error {
 		roles = append(roles, page.Roles...)
 		return nil
 	}); err != nil {
