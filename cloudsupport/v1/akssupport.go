@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 	armauthorizationv2 "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerregistry/armcontainerregistry"
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v2"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +36,7 @@ type IAKSSupport interface {
 	GetContextName(*armcontainerservice.ManagedCluster) string
 	GetSubscriptionID() (string, error)
 	GetResourceGroup() (string, error)
+	GetDescribeRepositories(subscriptionId string, resourceGroup string) ([]*armcontainerregistry.Registry, error)
 	ListAllRolesForScope(subscriptionId string, scope string) (*ListRoleAssignment, error)
 	GetGroupIdsRoleBindings(kapi *k8sinterface.KubernetesApi, namespace string) ([]string, error)
 	ListAllRoleDefinitions(subscriptionId string, scope string) (*ListRoleDefinition, error)
@@ -97,6 +99,37 @@ func (AKSSupport *AKSSupport) GetResourceGroup() (string, error) {
 		return subscriptionId, nil
 	}
 	return "", fmt.Errorf("error retrieving azure subscription id: environment variable %s not set", AZURE_RESOURCE_GROUP_ENV_VAR)
+}
+
+// GetDescribeRepositories returns a list of Azure Container Registries in the given resource group
+func (AKSSupport *AKSSupport) GetDescribeRepositories(subscriptionId string, resourceGroup string) ([]*armcontainerregistry.Registry, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), aksCallTimeout)
+	defer cancel()
+
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	clientFactory, err := armcontainerregistry.NewClientFactory(subscriptionId, cred, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := clientFactory.NewRegistriesClient()
+
+	pager := client.NewListByResourceGroupPager(resourceGroup, nil)
+
+	var registries []*armcontainerregistry.Registry
+
+	for pager.More() {
+		nextResult, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to advance page: %v", err)
+		}
+		registries = append(registries, nextResult.Value...)
+	}
+
+	return registries, nil
 }
 
 // List all role assignments that apply to a scope

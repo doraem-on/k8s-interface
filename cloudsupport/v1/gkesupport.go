@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
+	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
+	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	container "cloud.google.com/go/container/apiv1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	containerpb "google.golang.org/genproto/googleapis/container/v1"
 )
@@ -20,6 +22,8 @@ type IGKESupport interface {
 	GetProject(cluster string) (string, error)
 	GetRegion(cluster string) (string, error)
 	GetContextName(cluster string) string
+	GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error)
+	GetListEntitiesForPolicies(project string) ([]*iam.Role, error)
 	GetIAMMappings(project string) (map[string]string, map[string]string, error)
 }
 type GKESupport struct {
@@ -34,16 +38,70 @@ func NewGKESupport() *GKESupport {
 }
 
 func (gkeSupport *GKESupport) GetRegion(cluster string) (string, error) {
-	region, present := os.LookupEnv(KS_CLOUD_REGION_ENV_VAR)
+	region, present := os.LookupEnv(KS_GKE_REGION_ENV_VAR)
 	if present {
 		return region, nil
 	}
 	parsedName := strings.Split(cluster, "_")
 	if len(parsedName) < 3 {
-		return "", fmt.Errorf("failed to parse region name from cluster name: '%s'", cluster)
+		return "", fmt.Errorf("error retrieving gke region: environment variable %s not set", KS_GKE_REGION_ENV_VAR)
 	}
 	region = parsedName[2]
 	return region, nil
+}
+
+// GetDescribeRepositories returns a list of GCP Artifact Registries in the given project and region
+func (gkeSupport *GKESupport) GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error) {
+	ctx := context.Background()
+
+	client, err := artifactregistry.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	// Parent format: projects/PROJECT_ID/locations/LOCATION_ID
+	req := &artifactregistrypb.ListRepositoriesRequest{
+		Parent: fmt.Sprintf("projects/%s/locations/%s", project, region),
+	}
+
+	it := client.ListRepositories(ctx, req)
+	var repositories []*artifactregistrypb.Repository
+	
+	for {
+		resp, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		repositories = append(repositories, resp)
+	}
+
+	return repositories, nil
+}
+
+// GetListEntitiesForPolicies returns a list of IAM roles in the given project
+func (gkeSupport *GKESupport) GetListEntitiesForPolicies(project string) ([]*iam.Role, error) {
+	ctx := context.Background()
+	service, err := iam.NewService(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	parent := fmt.Sprintf("projects/%s", project)
+	var roles []*iam.Role
+
+	req := service.Projects.Roles.List(parent)
+	if err := req.Pages(ctx, func(page *iam.ListRolesResponse) error {
+		roles = append(roles, page.Roles...)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	
+	return roles, nil
 }
 
 func (gkeSupport *GKESupport) GetProject(cluster string) (string, error) {

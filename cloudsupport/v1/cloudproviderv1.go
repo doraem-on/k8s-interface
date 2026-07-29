@@ -206,15 +206,105 @@ func GetDescribeRepositoriesEKS(eksSupport IEKSSupport, cluster string, region s
 }
 
 func GetDescribeRepositoriesGKE(gkeSupport IGKESupport, cluster string, project string, region string) (*CloudProviderDescribeRepositories, error) {
-	return nil, fmt.Errorf("GetDescribeRepositoriesGKE not implemented yet")
+	clusterDescribe, err := gkeSupport.GetClusterDescribe(cluster, region, project)
+	if err != nil {
+		return nil, err
+	}
+
+	describeRepositories, err := gkeSupport.GetDescribeRepositories(project, region)
+	if err != nil {
+		return nil, err
+	}
+	
+	repositoriesInfo := &CloudProviderDescribeRepositories{}
+	repositoriesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version))
+	repositoriesInfo.SetName(gkeSupport.GetName(clusterDescribe))
+	repositoriesInfo.SetProvider(GKE)
+	repositoriesInfo.SetKind(apis.CloudProviderDescribeRepositoriesKind)
+
+	data := map[string]interface{}{}
+	wrapper := map[string]interface{}{
+		"registries": describeRepositories,
+	}
+	wrapperBytes, _ := json.Marshal(wrapper)
+	
+	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
+		return nil, err
+	}
+	repositoriesInfo.SetData(data)
+
+	return repositoriesInfo, nil
 }
 
 func GetDescribeRepositoriesAKS(aksSupport IAKSSupport, cluster string, subscriptionId string, resourceGroup string) (*CloudProviderDescribeRepositories, error) {
-	return nil, fmt.Errorf("GetDescribeRepositoriesAKS not implemented yet")
+	clusterDescribe, err := aksSupport.GetClusterDescribe(subscriptionId, cluster, resourceGroup)
+	if err != nil {
+		return nil, err
+	}
+
+	describeRepositories, err := aksSupport.GetDescribeRepositories(subscriptionId, resourceGroup)
+	if err != nil {
+		return nil, err
+	}
+	
+	repositoriesInfo := &CloudProviderDescribeRepositories{}
+	repositoriesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionAKS, Version))
+	repositoriesInfo.SetName(aksSupport.GetContextName(clusterDescribe))
+	repositoriesInfo.SetProvider(AKS)
+	repositoriesInfo.SetKind(apis.CloudProviderDescribeRepositoriesKind)
+
+	// Since DescribeRepositories returns a slice, we can wrap it in a map to be unmarshaled into SetData
+	data := map[string]interface{}{}
+	// To maintain compatibility with how DescribeRepositories is parsed elsewhere, we can wrap the array
+	// Or we can just unmarshal the array into a specific key like "registries".
+	// Let's create a wrapper struct to marshal so the root is an object.
+	wrapper := map[string]interface{}{
+		"registries": describeRepositories,
+	}
+	wrapperBytes, _ := json.Marshal(wrapper)
+	
+	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
+		return nil, err
+	}
+	repositoriesInfo.SetData(data)
+
+	return repositoriesInfo, nil
 }
 
 func GetListEntitiesForPoliciesGKE(gkeSupport IGKESupport, cluster string, project string) (*CloudProviderListEntitiesForPolicies, error) {
-	return nil, fmt.Errorf("GetListEntitiesForPoliciesGKE not implemented yet")
+	region, err := gkeSupport.GetRegion(cluster)
+	if err != nil {
+		return nil, err
+	}
+	
+	clusterDescribe, err := gkeSupport.GetClusterDescribe(cluster, region, project)
+	if err != nil {
+		return nil, err
+	}
+
+	roles, err := gkeSupport.GetListEntitiesForPolicies(project)
+	if err != nil {
+		return nil, err
+	}
+	
+	listEntitiesForPoliciesInfo := &CloudProviderListEntitiesForPolicies{}
+	listEntitiesForPoliciesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version))
+	listEntitiesForPoliciesInfo.SetName(gkeSupport.GetName(clusterDescribe))
+	listEntitiesForPoliciesInfo.SetProvider(GKE)
+	listEntitiesForPoliciesInfo.SetKind(apis.CloudProviderListEntitiesForPoliciesKind)
+
+	data := map[string]interface{}{}
+	wrapper := map[string]interface{}{
+		"rolesPolicies": roles,
+	}
+	wrapperBytes, _ := json.Marshal(wrapper)
+	
+	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
+		return nil, err
+	}
+	listEntitiesForPoliciesInfo.SetData(data)
+
+	return listEntitiesForPoliciesInfo, nil
 }
 
 // ============================== ClusterDescribe ==============================
