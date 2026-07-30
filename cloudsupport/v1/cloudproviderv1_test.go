@@ -123,6 +123,19 @@ func TestSetWorkloadGetPolicyVersion(t *testing.T) {
 }
 
 // ==================== ListEntitiesForPolicies ====================
+
+func TestGetListEntitiesForPoliciesGKE(t *testing.T) {
+	g := NewGKESupportMock()
+	repos, err := GetListEntitiesForPoliciesGKE(g, "kubescape-demo-01", "", "")
+	assert.NoError(t, err)
+	assert.Equal(t, apis.CloudProviderListEntitiesForPoliciesKind, repos.GetKind())
+	assert.Equal(t, "container.googleapis.com/v1/ListEntitiesForPolicies/kubescape-demo-01", repos.GetID())
+	assert.Equal(t, k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version), repos.GetApiVersion())
+	assert.Equal(t, "kubescape-demo-01", repos.GetName())
+	assert.Equal(t, TypeCloudProviderListEntitiesForPolicies, repos.GetObjectType())
+	assert.NotEmpty(t, repos.GetData()["rolesPolicies"])
+}
+
 func TestGetListEntitiesForPoliciesAKS(t *testing.T) {
 	g := NewAKSSupportMock()
 	repos, err := GetListEntitiesForPoliciesAKS(g, "XXXXXX", "armo-testing", "armo-dev")
@@ -186,6 +199,30 @@ func TestSetWorkloadListEntitiesForPolicies(t *testing.T) {
 }
 
 // ==================== DescribeRepositories ====================
+
+func TestGetDescribeRepositoriesGKE(t *testing.T) {
+	g := NewGKESupportMock()
+	repos, err := GetDescribeRepositoriesGKE(g, "kubescape-demo-01", "", "")
+	assert.NoError(t, err)
+	assert.Equal(t, apis.CloudProviderDescribeRepositoriesKind, repos.GetKind())
+	assert.Equal(t, "container.googleapis.com/v1/DescribeRepositories/kubescape-demo-01", repos.GetID())
+	assert.Equal(t, k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version), repos.GetApiVersion())
+	assert.Equal(t, "kubescape-demo-01", repos.GetName())
+	assert.Equal(t, TypeCloudProviderDescribeRepositories, repos.GetObjectType())
+	assert.NotEmpty(t, repos.GetData()["registries"])
+}
+
+func TestGetDescribeRepositoriesAKS(t *testing.T) {
+	g := NewAKSSupportMock()
+	repos, err := GetDescribeRepositoriesAKS(g, "XXXXXX", "armo-testing", "armo-dev")
+	assert.NoError(t, err)
+	assert.Equal(t, apis.CloudProviderDescribeRepositoriesKind, repos.GetKind())
+	assert.Equal(t, "management.azure.com/v1/DescribeRepositories/daniel", repos.GetID())
+	assert.Equal(t, k8sinterface.JoinGroupVersion(apis.ApiVersionAKS, Version), repos.GetApiVersion())
+	assert.Equal(t, "daniel", repos.GetName())
+	assert.Equal(t, TypeCloudProviderDescribeRepositories, repos.GetObjectType())
+	assert.NotEmpty(t, repos.GetData()["registries"])
+}
 
 func TestGetDescribeRepositoriesEKS(t *testing.T) {
 	g := NewEKSSupportMock()

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"strings"
 
+	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"github.com/kubescape/k8s-interface/cloudsupport/mockobjects"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"google.golang.org/api/cloudresourcemanager/v1"
 	containerpb "google.golang.org/genproto/googleapis/container/v1"
 )
 
@@ -54,4 +56,12 @@ func (gkeSupportM *GKESupportMock) GetContextName(cluster string) string {
 
 func (gkeSupportM *GKESupportMock) GetIAMMappings(project string) (map[string]string, map[string]string, error) {
 	return nil, nil, nil
+}
+
+func (gkeSupportM *GKESupportMock) GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error) {
+	return []*artifactregistrypb.Repository{{Name: "mock-repo"}}, nil
+}
+
+func (gkeSupportM *GKESupportMock) GetListEntitiesForPolicies(project string) (*cloudresourcemanager.Policy, error) {
+	return &cloudresourcemanager.Policy{Bindings: []*cloudresourcemanager.Binding{{Role: "roles/viewer"}}}, nil
 }

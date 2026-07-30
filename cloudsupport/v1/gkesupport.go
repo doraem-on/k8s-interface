@@ -6,11 +6,13 @@ import (
 	"os"
 	"strings"
 	"time"
+
 	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	container "cloud.google.com/go/container/apiv1"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -24,7 +26,7 @@ type IGKESupport interface {
 	GetRegion(cluster string) (string, error)
 	GetContextName(cluster string) string
 	GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error)
-	GetListEntitiesForPolicies(project string) ([]*iam.Role, error)
+	GetListEntitiesForPolicies(project string) (*cloudresourcemanager.Policy, error)
 	GetIAMMappings(project string) (map[string]string, map[string]string, error)
 }
 type GKESupport struct {
@@ -44,13 +46,13 @@ func NewGKESupport() *GKESupport {
 }
 
 func (gkeSupport *GKESupport) GetRegion(cluster string) (string, error) {
-	region, present := os.LookupEnv(KS_GKE_REGION_ENV_VAR)
+	region, present := os.LookupEnv(KS_CLOUD_REGION_ENV_VAR)
 	if present && strings.TrimSpace(region) != "" {
 		return region, nil
 	}
 	parsedName := strings.Split(cluster, "_")
 	if len(parsedName) < 3 {
-		return "", fmt.Errorf("error retrieving gke region: environment variable %s not set", KS_GKE_REGION_ENV_VAR)
+		return "", fmt.Errorf("failed to parse region from cluster name: '%s'", cluster)
 	}
 	region = parsedName[2]
 	return region, nil
@@ -58,7 +60,7 @@ func (gkeSupport *GKESupport) GetRegion(cluster string) (string, error) {
 
 // GetDescribeRepositories returns a list of GCP Artifact Registries in the given project and region
 func (gkeSupport *GKESupport) GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gkeCallTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), gkeRBACEnumerationTimeout)
 	defer cancel()
 
 	client, err := artifactregistry.NewClient(ctx)
@@ -68,13 +70,18 @@ func (gkeSupport *GKESupport) GetDescribeRepositories(project string, region str
 	defer client.Close()
 
 	// Parent format: projects/PROJECT_ID/locations/LOCATION_ID
+	normalizedRegion := region
+	parts := strings.Split(region, "-")
+	if len(parts) == 3 && len(parts[2]) == 1 {
+		normalizedRegion = strings.Join(parts[:2], "-")
+	}
 	req := &artifactregistrypb.ListRepositoriesRequest{
-		Parent: fmt.Sprintf("projects/%s/locations/%s", project, region),
+		Parent: fmt.Sprintf("projects/%s/locations/%s", project, normalizedRegion),
 	}
 
 	it := client.ListRepositories(ctx, req)
 	var repositories []*artifactregistrypb.Repository
-	
+
 	for {
 		resp, err := it.Next()
 		if err == iterator.Done {
@@ -89,38 +96,23 @@ func (gkeSupport *GKESupport) GetDescribeRepositories(project string, region str
 	return repositories, nil
 }
 
-// GetListEntitiesForPolicies returns a list of IAM roles in the given project
-func (gkeSupport *GKESupport) GetListEntitiesForPolicies(project string) ([]*iam.Role, error) {
+// GetListEntitiesForPolicies returns a list of IAM role bindings in the given project
+func (gkeSupport *GKESupport) GetListEntitiesForPolicies(project string) (*cloudresourcemanager.Policy, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gkeRBACEnumerationTimeout)
 	defer cancel()
 
-	service, err := iam.NewService(ctx)
+	crmService, err := cloudresourcemanager.NewService(ctx)
 	if err != nil {
 		return nil, err
 	}
-	
-	var roles []*iam.Role
 
-	// 1. Fetch predefined roles
-	reqPredefined := service.Roles.List()
-	if err := reqPredefined.Pages(ctx, func(page *iam.ListRolesResponse) error {
-		roles = append(roles, page.Roles...)
-		return nil
-	}); err != nil {
+	req := &cloudresourcemanager.GetIamPolicyRequest{}
+	policy, err := crmService.Projects.GetIamPolicy(project, req).Context(ctx).Do()
+	if err != nil {
 		return nil, err
 	}
 
-	// 2. Fetch project custom roles
-	parent := fmt.Sprintf("projects/%s", project)
-	reqCustom := service.Projects.Roles.List(parent)
-	if err := reqCustom.Pages(ctx, func(page *iam.ListRolesResponse) error {
-		roles = append(roles, page.Roles...)
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	
-	return roles, nil
+	return policy, nil
 }
 
 func (gkeSupport *GKESupport) GetProject(cluster string) (string, error) {

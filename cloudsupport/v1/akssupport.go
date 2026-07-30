@@ -36,7 +36,7 @@ type IAKSSupport interface {
 	GetContextName(*armcontainerservice.ManagedCluster) string
 	GetSubscriptionID() (string, error)
 	GetResourceGroup() (string, error)
-	GetDescribeRepositories(subscriptionId string, resourceGroup string) ([]*armcontainerregistry.Registry, error)
+	GetDescribeRepositories(subscriptionId string) ([]*armcontainerregistry.Registry, error)
 	ListAllRolesForScope(subscriptionId string, scope string) (*ListRoleAssignment, error)
 	GetGroupIdsRoleBindings(kapi *k8sinterface.KubernetesApi, namespace string) ([]string, error)
 	ListAllRoleDefinitions(subscriptionId string, scope string) (*ListRoleDefinition, error)
@@ -101,9 +101,9 @@ func (AKSSupport *AKSSupport) GetResourceGroup() (string, error) {
 	return "", fmt.Errorf("error retrieving azure subscription id: environment variable %s not set", AZURE_RESOURCE_GROUP_ENV_VAR)
 }
 
-// GetDescribeRepositories returns a list of Azure Container Registries in the given resource group
-func (AKSSupport *AKSSupport) GetDescribeRepositories(subscriptionId string, resourceGroup string) ([]*armcontainerregistry.Registry, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), aksCallTimeout)
+// GetDescribeRepositories returns a list of Azure Container Registries in the subscription
+func (AKSSupport *AKSSupport) GetDescribeRepositories(subscriptionId string) ([]*armcontainerregistry.Registry, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), aksRBACEnumerationTimeout)
 	defer cancel()
 
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
@@ -117,14 +117,14 @@ func (AKSSupport *AKSSupport) GetDescribeRepositories(subscriptionId string, res
 	}
 	client := clientFactory.NewRegistriesClient()
 
-	pager := client.NewListByResourceGroupPager(resourceGroup, nil)
+	pager := client.NewListPager(nil)
 
 	var registries []*armcontainerregistry.Registry
 
 	for pager.More() {
 		nextResult, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to advance page: %v", err)
+			return nil, fmt.Errorf("failed to advance page: %w", err)
 		}
 		registries = append(registries, nextResult.Value...)
 	}
@@ -161,7 +161,7 @@ func (AKSSupport *AKSSupport) ListAllRolesForScope(subscriptionId string, scope 
 	for pager.More() {
 		nextResult, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to advance page: %v", err)
+			return nil, fmt.Errorf("failed to advance page: %w", err)
 		}
 
 		roleList = append(roleList, nextResult.Value...)

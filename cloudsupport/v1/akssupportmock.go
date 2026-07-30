@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerregistry/armcontainerregistry"
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v2"
 	"github.com/kubescape/k8s-interface/cloudsupport/mockobjects"
 	"github.com/kubescape/k8s-interface/k8sinterface"
@@ -47,4 +48,9 @@ func (AKSSupportM *AKSSupportMock) GetResourceGroup() (string, error) {
 
 func (AKSSupportM *AKSSupportMock) GetGroupIdsRoleBindings(kapi *k8sinterface.KubernetesApi, namespace string) ([]string, error) {
 	return []string{"e808215d-d159-49ba-8bb6-9661ba478842", "unexpected comma, expecting type"}, nil
+}
+
+func (AKSSupportM *AKSSupportMock) GetDescribeRepositories(subscriptionId string) ([]*armcontainerregistry.Registry, error) {
+	name := "mock-repo"
+	return []*armcontainerregistry.Registry{{Name: &name}}, nil
 }

@@ -35,7 +35,9 @@ const (
 CloudProviderDescribeRepositories:
 =========================
 
-CloudProviderDescribeRepositories has a list of the image repositories in the cloud provider
+CloudProviderDescribeRepositories has a list of the image repositories in the cloud provider.
+For EKS, the Data field contains the unmarshaled 'ecr.DescribeRepositoriesOutput' at its root.
+For GKE and AKS, since the SDKs return an array instead of a wrapper struct, the list is wrapped in a "registries" key to ensure the JSON root is an object.
 */
 type CloudProviderDescribeRepositories struct {
 	ApiVersion string                 `json:"apiVersion"`
@@ -48,7 +50,9 @@ type CloudProviderDescribeRepositories struct {
 CloudProviderListEntitiesForPolicies:
 =========================
 
-CloudProviderListEntitiesForPolicies has a list of the RolePolicies in the cloud provider (EKS)
+CloudProviderListEntitiesForPolicies has a list of the RolePolicies in the cloud provider.
+For EKS, the Data field contains the unmarshaled struct at its root.
+For GKE and AKS, the actual policy and role assignment objects are wrapped in a "rolesPolicies" key to maintain consistency with the expected JSON object root.
 */
 type CloudProviderListEntitiesForPolicies struct {
 	ApiVersion string                 `json:"apiVersion"`

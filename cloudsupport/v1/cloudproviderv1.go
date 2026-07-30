@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/kubescape/k8s-interface/cloudsupport/apis"
@@ -215,7 +216,7 @@ func GetDescribeRepositoriesGKE(gkeSupport IGKESupport, cluster string, project 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	repositoriesInfo := &CloudProviderDescribeRepositories{}
 	repositoriesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version))
 	repositoriesInfo.SetName(gkeSupport.GetName(clusterDescribe))
@@ -223,11 +224,25 @@ func GetDescribeRepositoriesGKE(gkeSupport IGKESupport, cluster string, project 
 	repositoriesInfo.SetKind(apis.CloudProviderDescribeRepositoriesKind)
 
 	data := map[string]interface{}{}
-	wrapper := map[string]interface{}{
-		"registries": describeRepositories,
+
+	// Marshal each repository with protojson to ensure canonical format (e.g. format="DOCKER", createTime is RFC3339)
+	var rawRepositories []json.RawMessage
+	for _, repo := range describeRepositories {
+		b, err := protojson.Marshal(repo)
+		if err != nil {
+			return nil, err
+		}
+		rawRepositories = append(rawRepositories, b)
 	}
-	wrapperBytes, _ := json.Marshal(wrapper)
-	
+
+	wrapper := map[string]interface{}{
+		"registries": rawRepositories,
+	}
+	wrapperBytes, err := json.Marshal(wrapper)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
 		return nil, err
 	}
@@ -242,27 +257,26 @@ func GetDescribeRepositoriesAKS(aksSupport IAKSSupport, cluster string, subscrip
 		return nil, err
 	}
 
-	describeRepositories, err := aksSupport.GetDescribeRepositories(subscriptionId, resourceGroup)
+	describeRepositories, err := aksSupport.GetDescribeRepositories(subscriptionId)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	repositoriesInfo := &CloudProviderDescribeRepositories{}
 	repositoriesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionAKS, Version))
 	repositoriesInfo.SetName(aksSupport.GetContextName(clusterDescribe))
 	repositoriesInfo.SetProvider(AKS)
 	repositoriesInfo.SetKind(apis.CloudProviderDescribeRepositoriesKind)
 
-	// Since DescribeRepositories returns a slice, we can wrap it in a map to be unmarshaled into SetData
 	data := map[string]interface{}{}
-	// To maintain compatibility with how DescribeRepositories is parsed elsewhere, we can wrap the array
-	// Or we can just unmarshal the array into a specific key like "registries".
-	// Let's create a wrapper struct to marshal so the root is an object.
 	wrapper := map[string]interface{}{
 		"registries": describeRepositories,
 	}
-	wrapperBytes, _ := json.Marshal(wrapper)
-	
+	wrapperBytes, err := json.Marshal(wrapper)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
 		return nil, err
 	}
@@ -271,12 +285,8 @@ func GetDescribeRepositoriesAKS(aksSupport IAKSSupport, cluster string, subscrip
 	return repositoriesInfo, nil
 }
 
-func GetListEntitiesForPoliciesGKE(gkeSupport IGKESupport, cluster string, project string) (*CloudProviderListEntitiesForPolicies, error) {
-	region, err := gkeSupport.GetRegion(cluster)
-	if err != nil {
-		return nil, err
-	}
-	
+func GetListEntitiesForPoliciesGKE(gkeSupport IGKESupport, cluster string, project string, region string) (*CloudProviderListEntitiesForPolicies, error) {
+	// GetClusterDescribe accepts the un-normalized zone-region which is valid for that API
 	clusterDescribe, err := gkeSupport.GetClusterDescribe(cluster, region, project)
 	if err != nil {
 		return nil, err
@@ -286,7 +296,7 @@ func GetListEntitiesForPoliciesGKE(gkeSupport IGKESupport, cluster string, proje
 	if err != nil {
 		return nil, err
 	}
-	
+
 	listEntitiesForPoliciesInfo := &CloudProviderListEntitiesForPolicies{}
 	listEntitiesForPoliciesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version))
 	listEntitiesForPoliciesInfo.SetName(gkeSupport.GetName(clusterDescribe))
@@ -297,8 +307,11 @@ func GetListEntitiesForPoliciesGKE(gkeSupport IGKESupport, cluster string, proje
 	wrapper := map[string]interface{}{
 		"rolesPolicies": roles,
 	}
-	wrapperBytes, _ := json.Marshal(wrapper)
-	
+	wrapperBytes, err := json.Marshal(wrapper)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
 		return nil, err
 	}
