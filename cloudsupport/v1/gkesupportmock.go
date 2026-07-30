@@ -63,5 +63,19 @@ func (gkeSupportM *GKESupportMock) GetDescribeRepositories(project string, regio
 }
 
 func (gkeSupportM *GKESupportMock) GetListEntitiesForPolicies(project string) (*cloudresourcemanager.Policy, error) {
-	return &cloudresourcemanager.Policy{Bindings: []*cloudresourcemanager.Binding{{Role: "roles/viewer"}}}, nil
+	return &cloudresourcemanager.Policy{
+		Version: 3,
+		Bindings: []*cloudresourcemanager.Binding{
+			{
+				Role: "roles/viewer",
+			},
+			{
+				Role: "roles/editor",
+				Condition: &cloudresourcemanager.Expr{
+					Expression: "request.time < timestamp('2025-01-01T00:00:00Z')",
+					Title:      "expires_end_of_2024",
+				},
+			},
+		},
+	}, nil
 }

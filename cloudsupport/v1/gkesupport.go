@@ -106,7 +106,11 @@ func (gkeSupport *GKESupport) GetListEntitiesForPolicies(project string) (*cloud
 		return nil, err
 	}
 
-	req := &cloudresourcemanager.GetIamPolicyRequest{}
+	req := &cloudresourcemanager.GetIamPolicyRequest{
+		Options: &cloudresourcemanager.GetPolicyOptions{
+			RequestedPolicyVersion: 3,
+		},
+	}
 	policy, err := crmService.Projects.GetIamPolicy(project, req).Context(ctx).Do()
 	if err != nil {
 		return nil, err
