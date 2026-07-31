@@ -70,25 +70,25 @@ func GetDescriptiveInfoFromCloudProvider(cluster string, cloudProvider string) (
 		eksSupport := cloudsupportv1.NewEKSSupport()
 		region, err := eksSupport.GetRegion(cluster)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 		clusterInfo, err = cloudsupportv1.GetClusterDescribeEKS(eksSupport, cluster, region)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 	case cloudsupportv1.GKE:
 		gkeSupport := cloudsupportv1.NewGKESupport()
 		project, err := gkeSupport.GetProject(cluster)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 		region, err := gkeSupport.GetRegion(cluster)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 		clusterInfo, err = cloudsupportv1.GetClusterDescribeGKE(gkeSupport, cluster, region, project)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 	case cloudsupportv1.AKS:
 		aksSupport := cloudsupportv1.NewAKSSupport()
@@ -124,18 +124,40 @@ func GetDescribeRepositoriesFromCloudProvider(cluster string, cloudProvider stri
 		eksSupport := cloudsupportv1.NewEKSSupport()
 		region, err := eksSupport.GetRegion(cluster)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 		clusterInfo, err = cloudsupportv1.GetDescribeRepositoriesEKS(eksSupport, cluster, region)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 	case cloudsupportv1.GKE:
-		//TODO - implement GKE support
-		return nil, fmt.Errorf(cloudsupportv1.NotSupportedMsg)
+		gkeSupport := cloudsupportv1.NewGKESupport()
+		project, err := gkeSupport.GetProject(cluster)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
+		region, err := gkeSupport.GetRegion(cluster)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
+		clusterInfo, err = cloudsupportv1.GetDescribeRepositoriesGKE(gkeSupport, cluster, project, region)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
 	case cloudsupportv1.AKS:
-		//TODO - implement AKS support
-		return nil, fmt.Errorf(cloudsupportv1.NotSupportedMsg)
+		aksSupport := cloudsupportv1.NewAKSSupport()
+		subscriptionID, err := aksSupport.GetSubscriptionID()
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
+		resourceGroup, err := aksSupport.GetResourceGroup()
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
+		clusterInfo, err = cloudsupportv1.GetDescribeRepositoriesAKS(aksSupport, cluster, subscriptionID, resourceGroup)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
 	default:
 		return nil, fmt.Errorf(cloudsupportv1.NotSupportedMsg)
 	}
@@ -156,15 +178,26 @@ func GetListEntitiesForPoliciesFromCloudProvider(cluster string, cloudProvider s
 		eksSupport := cloudsupportv1.NewEKSSupport()
 		region, err := eksSupport.GetRegion(cluster)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 		listEntitiesForPolicies, err = cloudsupportv1.GetListEntitiesForPoliciesEKS(eksSupport, cluster, region)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 	case cloudsupportv1.GKE:
-		//TODO - implement GKE support
-		return nil, fmt.Errorf(cloudsupportv1.NotSupportedMsg)
+		gkeSupport := cloudsupportv1.NewGKESupport()
+		project, err := gkeSupport.GetProject(cluster)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
+		region, err := gkeSupport.GetRegion(cluster)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
+		listEntitiesForPolicies, err = cloudsupportv1.GetListEntitiesForPoliciesGKE(gkeSupport, cluster, project, region)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
+		}
 	case cloudsupportv1.AKS:
 		aksSupport := cloudsupportv1.NewAKSSupport()
 		subscriptionID, err := aksSupport.GetSubscriptionID()
@@ -199,11 +232,11 @@ func GetPolicyVersionFromCloudProvider(cluster string, cloudProvider string) (wo
 		eksSupport := cloudsupportv1.NewEKSSupport()
 		region, err := eksSupport.GetRegion(cluster)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 		policyVersion, err = cloudsupportv1.GetPolicyVersionEKS(eksSupport, cluster, region)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %v", ErrCloudDescribeUnavailable, err)
 		}
 	case cloudsupportv1.GKE:
 		//TODO - implement GKE support

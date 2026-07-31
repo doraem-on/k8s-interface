@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/kubescape/k8s-interface/cloudsupport/apis"
@@ -106,6 +107,7 @@ func NewDescriptiveInfoFromCloudProvider(object map[string]interface{}) *CloudPr
 
 // ================================ ListEntitiesForPolicies ================================
 
+// GetListEntitiesForPoliciesEKS wraps the EKS list entities for policies result into the standard CloudProviderListEntitiesForPolicies format
 func GetListEntitiesForPoliciesEKS(eksSupport IEKSSupport, cluster string, region string) (*CloudProviderListEntitiesForPolicies, error) {
 	cluster = eksSupport.GetContextName(cluster)
 	// get cluster describe just to get cluster name
@@ -173,6 +175,7 @@ func GetListEntitiesForPoliciesAKS(aksSupport IAKSSupport, cluster string, subsc
 
 // ================================ DescribeRepositories ================================
 
+// GetDescribeRepositoriesEKS wraps the EKS describe repositories result into the standard CloudProviderDescribeRepositories format
 func GetDescribeRepositoriesEKS(eksSupport IEKSSupport, cluster string, region string) (*CloudProviderDescribeRepositories, error) {
 	cluster = eksSupport.GetContextName(cluster)
 	// get cluster describe just to get cluster name
@@ -203,6 +206,124 @@ func GetDescribeRepositoriesEKS(eksSupport IEKSSupport, cluster string, region s
 	repositoriesInfo.SetData(data)
 
 	return repositoriesInfo, nil
+}
+
+func GetDescribeRepositoriesGKE(gkeSupport IGKESupport, cluster string, project string, region string) (*CloudProviderDescribeRepositories, error) {
+	clusterDescribe, err := gkeSupport.GetClusterDescribe(cluster, region, project)
+	if err != nil {
+		return nil, err
+	}
+
+	describeRepositories, err := gkeSupport.GetDescribeRepositories(project, region)
+	if err != nil {
+		return nil, err
+	}
+
+	repositoriesInfo := &CloudProviderDescribeRepositories{}
+	repositoriesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version))
+	repositoriesInfo.SetName(gkeSupport.GetName(clusterDescribe))
+	repositoriesInfo.SetProvider(GKE)
+	repositoriesInfo.SetKind(apis.CloudProviderDescribeRepositoriesKind)
+
+	data := map[string]interface{}{}
+
+	// Marshal each repository with protojson to ensure canonical format (e.g. format="DOCKER", createTime is RFC3339)
+	rawRepositories := []json.RawMessage{}
+	for _, repo := range describeRepositories {
+		b, err := protojson.Marshal(repo)
+		if err != nil {
+			return nil, err
+		}
+		rawRepositories = append(rawRepositories, b)
+	}
+
+	wrapper := map[string]interface{}{
+		"registries": rawRepositories,
+	}
+	wrapperBytes, err := json.Marshal(wrapper)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
+		return nil, err
+	}
+	repositoriesInfo.SetData(data)
+
+	return repositoriesInfo, nil
+}
+
+func GetDescribeRepositoriesAKS(aksSupport IAKSSupport, cluster string, subscriptionId string, resourceGroup string) (*CloudProviderDescribeRepositories, error) {
+	clusterDescribe, err := aksSupport.GetClusterDescribe(subscriptionId, cluster, resourceGroup)
+	if err != nil {
+		return nil, err
+	}
+
+	describeRepositories, err := aksSupport.GetDescribeRepositories(subscriptionId)
+	if err != nil {
+		return nil, err
+	}
+
+	repositoriesInfo := &CloudProviderDescribeRepositories{}
+	repositoriesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionAKS, Version))
+	repositoriesInfo.SetName(aksSupport.GetContextName(clusterDescribe))
+	repositoriesInfo.SetProvider(AKS)
+	repositoriesInfo.SetKind(apis.CloudProviderDescribeRepositoriesKind)
+
+	data := map[string]interface{}{}
+	var registries interface{} = describeRepositories
+	if describeRepositories == nil {
+		registries = []interface{}{}
+	}
+	wrapper := map[string]interface{}{
+		"registries": registries,
+	}
+	wrapperBytes, err := json.Marshal(wrapper)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
+		return nil, err
+	}
+	repositoriesInfo.SetData(data)
+
+	return repositoriesInfo, nil
+}
+
+func GetListEntitiesForPoliciesGKE(gkeSupport IGKESupport, cluster string, project string, region string) (*CloudProviderListEntitiesForPolicies, error) {
+	// GetClusterDescribe accepts the un-normalized zone-region which is valid for that API
+	clusterDescribe, err := gkeSupport.GetClusterDescribe(cluster, region, project)
+	if err != nil {
+		return nil, err
+	}
+
+	roles, err := gkeSupport.GetListEntitiesForPolicies(project)
+	if err != nil {
+		return nil, err
+	}
+
+	listEntitiesForPoliciesInfo := &CloudProviderListEntitiesForPolicies{}
+	listEntitiesForPoliciesInfo.SetApiVersion(k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version))
+	listEntitiesForPoliciesInfo.SetName(gkeSupport.GetName(clusterDescribe))
+	listEntitiesForPoliciesInfo.SetProvider(GKE)
+	listEntitiesForPoliciesInfo.SetKind(apis.CloudProviderListEntitiesForPoliciesKind)
+
+	data := map[string]interface{}{}
+	wrapper := map[string]interface{}{
+		"rolesPolicies": roles,
+	}
+	wrapperBytes, err := json.Marshal(wrapper)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(wrapperBytes, &data); err != nil {
+		return nil, err
+	}
+	listEntitiesForPoliciesInfo.SetData(data)
+
+	return listEntitiesForPoliciesInfo, nil
 }
 
 // ============================== ClusterDescribe ==============================
@@ -298,6 +419,7 @@ func GetClusterDescribeAKS(aksSupport IAKSSupport, cluster string, subscriptionI
 	return clusterInfo, nil
 }
 
+// GetPolicyVersionEKS wraps the EKS list policy version result into the standard CloudProviderPolicyVersion format
 func GetPolicyVersionEKS(eksSupport IEKSSupport, cluster string, region string) (*CloudProviderPolicyVersion, error) {
 	cluster = eksSupport.GetContextName(cluster)
 	// get cluster describe just to get cluster name

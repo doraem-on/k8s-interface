@@ -7,6 +7,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
+	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerregistry/armcontainerregistry"
 	"github.com/kubescape/k8s-interface/cloudsupport/apis"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"github.com/stretchr/testify/assert"
@@ -123,6 +125,22 @@ func TestSetWorkloadGetPolicyVersion(t *testing.T) {
 }
 
 // ==================== ListEntitiesForPolicies ====================
+func TestGetListEntitiesForPoliciesGKE(t *testing.T) {
+	g := NewGKESupportMock()
+	repos, err := GetListEntitiesForPoliciesGKE(g, "kubescape-demo-01", "", "")
+	assert.NoError(t, err)
+	assert.Equal(t, apis.CloudProviderListEntitiesForPoliciesKind, repos.GetKind())
+	assert.Equal(t, "container.googleapis.com/v1/ListEntitiesForPolicies/kubescape-demo-01", repos.GetID())
+	assert.Equal(t, k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version), repos.GetApiVersion())
+	assert.Equal(t, "kubescape-demo-01", repos.GetName())
+	assert.Equal(t, TypeCloudProviderListEntitiesForPolicies, repos.GetObjectType())
+	policy, ok := repos.GetData()["rolesPolicies"].(map[string]interface{})
+	if assert.True(t, ok) {
+		assert.Equal(t, float64(3), policy["version"])
+		assert.NotEmpty(t, policy["bindings"])
+	}
+}
+
 func TestGetListEntitiesForPoliciesAKS(t *testing.T) {
 	g := NewAKSSupportMock()
 	repos, err := GetListEntitiesForPoliciesAKS(g, "XXXXXX", "armo-testing", "armo-dev")
@@ -186,6 +204,68 @@ func TestSetWorkloadListEntitiesForPolicies(t *testing.T) {
 }
 
 // ==================== DescribeRepositories ====================
+
+func TestGetDescribeRepositoriesGKE(t *testing.T) {
+	g := NewGKESupportMock()
+	repos, err := GetDescribeRepositoriesGKE(g, "kubescape-demo-01", "", "")
+	assert.NoError(t, err)
+	assert.Equal(t, apis.CloudProviderDescribeRepositoriesKind, repos.GetKind())
+	assert.Equal(t, "container.googleapis.com/v1/DescribeRepositories/kubescape-demo-01", repos.GetID())
+	assert.Equal(t, k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version), repos.GetApiVersion())
+	assert.Equal(t, "kubescape-demo-01", repos.GetName())
+	assert.Equal(t, TypeCloudProviderDescribeRepositories, repos.GetObjectType())
+	assert.NotEmpty(t, repos.GetData()["registries"])
+
+	registries := repos.GetData()["registries"].([]interface{})
+	first := registries[0].(map[string]interface{})
+	assert.Equal(t, "DOCKER", first["format"])                   // not float64(1)
+	assert.Equal(t, "2023-11-14T22:13:20Z", first["createTime"]) // not {"seconds":...}
+	assert.NotContains(t, first, "FormatConfig")
+}
+
+type gkeSupportMockEmpty struct {
+	*GKESupportMock
+}
+
+func (m *gkeSupportMockEmpty) GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error) {
+	return nil, nil
+}
+
+func TestGetDescribeRepositoriesGKE_Empty(t *testing.T) {
+	g := &gkeSupportMockEmpty{NewGKESupportMock()}
+	repos, err := GetDescribeRepositoriesGKE(g, "kubescape-demo-01", "", "")
+	assert.NoError(t, err)
+	assert.NotNil(t, repos.GetData()["registries"])
+	assert.Empty(t, repos.GetData()["registries"])
+}
+
+func TestGetDescribeRepositoriesAKS(t *testing.T) {
+	g := NewAKSSupportMock()
+	repos, err := GetDescribeRepositoriesAKS(g, "XXXXXX", "armo-testing", "armo-dev")
+	assert.NoError(t, err)
+	assert.Equal(t, apis.CloudProviderDescribeRepositoriesKind, repos.GetKind())
+	assert.Equal(t, "management.azure.com/v1/DescribeRepositories/daniel", repos.GetID())
+	assert.Equal(t, k8sinterface.JoinGroupVersion(apis.ApiVersionAKS, Version), repos.GetApiVersion())
+	assert.Equal(t, "daniel", repos.GetName())
+	assert.Equal(t, TypeCloudProviderDescribeRepositories, repos.GetObjectType())
+	assert.NotEmpty(t, repos.GetData()["registries"])
+}
+
+type aksSupportMockEmpty struct {
+	*AKSSupportMock
+}
+
+func (m *aksSupportMockEmpty) GetDescribeRepositories(subscriptionId string) ([]*armcontainerregistry.Registry, error) {
+	return nil, nil
+}
+
+func TestGetDescribeRepositoriesAKS_Empty(t *testing.T) {
+	g := &aksSupportMockEmpty{NewAKSSupportMock()}
+	repos, err := GetDescribeRepositoriesAKS(g, "XXXXXX", "armo-testing", "armo-dev")
+	assert.NoError(t, err)
+	assert.NotNil(t, repos.GetData()["registries"])
+	assert.Empty(t, repos.GetData()["registries"])
+}
 
 func TestGetDescribeRepositoriesEKS(t *testing.T) {
 	g := NewEKSSupportMock()

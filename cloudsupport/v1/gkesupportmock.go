@@ -3,10 +3,14 @@ package v1
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
+	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"github.com/kubescape/k8s-interface/cloudsupport/mockobjects"
 	"github.com/kubescape/k8s-interface/k8sinterface"
+	"google.golang.org/api/cloudresourcemanager/v1"
 	containerpb "google.golang.org/genproto/googleapis/container/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func NewGKESupportMock() *GKESupportMock {
@@ -54,4 +58,30 @@ func (gkeSupportM *GKESupportMock) GetContextName(cluster string) string {
 
 func (gkeSupportM *GKESupportMock) GetIAMMappings(project string) (map[string]string, map[string]string, error) {
 	return nil, nil, nil
+}
+
+func (gkeSupportM *GKESupportMock) GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error) {
+	return []*artifactregistrypb.Repository{{
+		Name:       "projects/p/locations/us-central1/repositories/mock-repo",
+		Format:     artifactregistrypb.Repository_DOCKER,
+		CreateTime: timestamppb.New(time.Unix(1700000000, 0).UTC()),
+	}}, nil
+}
+
+func (gkeSupportM *GKESupportMock) GetListEntitiesForPolicies(project string) (*cloudresourcemanager.Policy, error) {
+	return &cloudresourcemanager.Policy{
+		Version: 3,
+		Bindings: []*cloudresourcemanager.Binding{
+			{
+				Role: "roles/viewer",
+			},
+			{
+				Role: "roles/editor",
+				Condition: &cloudresourcemanager.Expr{
+					Expression: "request.time < timestamp('2025-01-01T00:00:00Z')",
+					Title:      "expires_end_of_2024",
+				},
+			},
+		},
+	}, nil
 }
