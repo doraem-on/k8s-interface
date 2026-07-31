@@ -52,7 +52,7 @@ CloudProviderListEntitiesForPolicies:
 
 CloudProviderListEntitiesForPolicies has a list of the RolePolicies in the cloud provider.
 For EKS, the Data field contains the unmarshaled struct at its root.
-For GKE and AKS, the actual policy and role assignment objects are wrapped in a "rolesPolicies" key to maintain consistency with the expected JSON object root.
+For GKE, the "rolesPolicies" key holds a single IAM policy object. For AKS, it wraps the role assignment objects to maintain consistency with the expected JSON object root.
 */
 type CloudProviderListEntitiesForPolicies struct {
 	ApiVersion string                 `json:"apiVersion"`

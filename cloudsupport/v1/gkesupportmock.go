@@ -3,12 +3,14 @@ package v1
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"github.com/kubescape/k8s-interface/cloudsupport/mockobjects"
 	"github.com/kubescape/k8s-interface/k8sinterface"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	containerpb "google.golang.org/genproto/googleapis/container/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func NewGKESupportMock() *GKESupportMock {
@@ -59,7 +61,11 @@ func (gkeSupportM *GKESupportMock) GetIAMMappings(project string) (map[string]st
 }
 
 func (gkeSupportM *GKESupportMock) GetDescribeRepositories(project string, region string) ([]*artifactregistrypb.Repository, error) {
-	return []*artifactregistrypb.Repository{{Name: "mock-repo"}}, nil
+	return []*artifactregistrypb.Repository{{
+		Name:       "projects/p/locations/us-central1/repositories/mock-repo",
+		Format:     artifactregistrypb.Repository_DOCKER,
+		CreateTime: timestamppb.New(time.Unix(1700000000, 0).UTC()),
+	}}, nil
 }
 
 func (gkeSupportM *GKESupportMock) GetListEntitiesForPolicies(project string) (*cloudresourcemanager.Policy, error) {

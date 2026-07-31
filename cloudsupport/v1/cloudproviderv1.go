@@ -107,6 +107,7 @@ func NewDescriptiveInfoFromCloudProvider(object map[string]interface{}) *CloudPr
 
 // ================================ ListEntitiesForPolicies ================================
 
+// GetListEntitiesForPoliciesEKS wraps the EKS list entities for policies result into the standard CloudProviderListEntitiesForPolicies format
 func GetListEntitiesForPoliciesEKS(eksSupport IEKSSupport, cluster string, region string) (*CloudProviderListEntitiesForPolicies, error) {
 	cluster = eksSupport.GetContextName(cluster)
 	// get cluster describe just to get cluster name
@@ -174,6 +175,7 @@ func GetListEntitiesForPoliciesAKS(aksSupport IAKSSupport, cluster string, subsc
 
 // ================================ DescribeRepositories ================================
 
+// GetDescribeRepositoriesEKS wraps the EKS describe repositories result into the standard CloudProviderDescribeRepositories format
 func GetDescribeRepositoriesEKS(eksSupport IEKSSupport, cluster string, region string) (*CloudProviderDescribeRepositories, error) {
 	cluster = eksSupport.GetContextName(cluster)
 	// get cluster describe just to get cluster name
@@ -226,7 +228,7 @@ func GetDescribeRepositoriesGKE(gkeSupport IGKESupport, cluster string, project 
 	data := map[string]interface{}{}
 
 	// Marshal each repository with protojson to ensure canonical format (e.g. format="DOCKER", createTime is RFC3339)
-	var rawRepositories []json.RawMessage
+	rawRepositories := []json.RawMessage{}
 	for _, repo := range describeRepositories {
 		b, err := protojson.Marshal(repo)
 		if err != nil {
@@ -269,8 +271,12 @@ func GetDescribeRepositoriesAKS(aksSupport IAKSSupport, cluster string, subscrip
 	repositoriesInfo.SetKind(apis.CloudProviderDescribeRepositoriesKind)
 
 	data := map[string]interface{}{}
+	var registries interface{} = describeRepositories
+	if describeRepositories == nil {
+		registries = []interface{}{}
+	}
 	wrapper := map[string]interface{}{
-		"registries": describeRepositories,
+		"registries": registries,
 	}
 	wrapperBytes, err := json.Marshal(wrapper)
 	if err != nil {
@@ -413,6 +419,7 @@ func GetClusterDescribeAKS(aksSupport IAKSSupport, cluster string, subscriptionI
 	return clusterInfo, nil
 }
 
+// GetPolicyVersionEKS wraps the EKS list policy version result into the standard CloudProviderPolicyVersion format
 func GetPolicyVersionEKS(eksSupport IEKSSupport, cluster string, region string) (*CloudProviderPolicyVersion, error) {
 	cluster = eksSupport.GetContextName(cluster)
 	// get cluster describe just to get cluster name
