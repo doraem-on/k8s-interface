@@ -125,7 +125,6 @@ func TestSetWorkloadGetPolicyVersion(t *testing.T) {
 }
 
 // ==================== ListEntitiesForPolicies ====================
-
 func TestGetListEntitiesForPoliciesGKE(t *testing.T) {
 	g := NewGKESupportMock()
 	repos, err := GetListEntitiesForPoliciesGKE(g, "kubescape-demo-01", "", "")
@@ -135,7 +134,11 @@ func TestGetListEntitiesForPoliciesGKE(t *testing.T) {
 	assert.Equal(t, k8sinterface.JoinGroupVersion(apis.ApiVersionGKE, Version), repos.GetApiVersion())
 	assert.Equal(t, "kubescape-demo-01", repos.GetName())
 	assert.Equal(t, TypeCloudProviderListEntitiesForPolicies, repos.GetObjectType())
-	assert.NotEmpty(t, repos.GetData()["rolesPolicies"])
+	policy, ok := repos.GetData()["rolesPolicies"].(map[string]interface{})
+	if assert.True(t, ok) {
+		assert.Equal(t, float64(3), policy["version"])
+		assert.NotEmpty(t, policy["bindings"])
+	}
 }
 
 func TestGetListEntitiesForPoliciesAKS(t *testing.T) {
