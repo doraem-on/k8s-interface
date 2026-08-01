@@ -607,3 +607,33 @@ func TestGetVolumes(t *testing.T) {
 	assert.Equal(t, 2, len(volumes))
 
 }
+
+func TestAccessorsWithNonStringMetadata(t *testing.T) {
+	// A manifest can be valid enough to be recognized as a workload and still
+	// carry a non-string value where a string is expected. The accessors used
+	// to assert the type outright and panic on such a document.
+	w, err := NewWorkload([]byte(`{
+		"apiVersion": "apps/v1",
+		"kind": "Deployment",
+		"metadata": {
+			"namespace": ["oops"],
+			"name": 42,
+			"labels": {"app": ["nope"]},
+			"annotations": {"note": 7}
+		}
+	}`))
+	assert.NoError(t, err)
+
+	assert.Equal(t, "", w.GetNamespace())
+	assert.Equal(t, "", w.GetName())
+	assert.NotPanics(t, func() { _ = w.GetID() })
+
+	_, ok := w.GetLabel("app")
+	assert.False(t, ok)
+	_, ok = w.GetAnnotation("note")
+	assert.False(t, ok)
+}
+
+func TestIsTypeListWorkloadsWithNonStringKind(t *testing.T) {
+	assert.False(t, IsTypeListWorkloads(map[string]interface{}{"kind": 123}))
+}

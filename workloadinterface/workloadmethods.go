@@ -204,7 +204,12 @@ func (w *Workload) GetObject() map[string]interface{} {
 }
 func (w *Workload) GetNamespace() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "namespace"); ok {
-		return v.(string)
+
+		if s, ok := v.(string); ok {
+
+			return s
+
+		}
 	}
 	return ""
 }
@@ -216,7 +221,12 @@ func (w *Workload) GetID() string {
 }
 func (w *Workload) GetName() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "name"); ok {
-		return v.(string)
+
+		if s, ok := v.(string); ok {
+
+			return s
+
+		}
 	}
 	return ""
 }
@@ -230,7 +240,12 @@ func (w *Workload) GetData() map[string]interface{} {
 
 func (w *Workload) GetApiVersion() string {
 	if v, ok := InspectWorkload(w.workload, "apiVersion"); ok {
-		return v.(string)
+
+		if s, ok := v.(string); ok {
+
+			return s
+
+		}
 	}
 	return ""
 }
@@ -257,7 +272,12 @@ func (w *Workload) GetGroup() string {
 
 func (w *Workload) GetGenerateName() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "generateName"); ok {
-		return v.(string)
+
+		if s, ok := v.(string); ok {
+
+			return s
+
+		}
 	}
 	return ""
 }
@@ -284,7 +304,12 @@ func (w *Workload) GetReplicas() int {
 
 func (w *Workload) GetKind() string {
 	if v, ok := InspectWorkload(w.workload, "kind"); ok {
-		return v.(string)
+
+		if s, ok := v.(string); ok {
+
+			return s
+
+		}
 	}
 	return ""
 }
@@ -306,7 +331,9 @@ func (w *Workload) GetSelector() (*metav1.LabelSelector, error) {
 		if m, ok := matchLabels.(map[string]interface{}); ok {
 			selector.MatchLabels = make(map[string]string, len(m))
 			for k, v := range m {
-				selector.MatchLabels[k] = v.(string)
+				if s, ok := v.(string); ok {
+					selector.MatchLabels[k] = s
+				}
 			}
 		}
 	}
@@ -324,20 +351,26 @@ func (w *Workload) GetSelector() (*metav1.LabelSelector, error) {
 
 func (w *Workload) GetAnnotation(annotation string) (string, bool) {
 	if v, ok := InspectWorkload(w.workload, "metadata", "annotations", annotation); ok {
-		return v.(string), ok
+		if s, ok := v.(string); ok {
+			return s, true
+		}
 	}
 	return "", false
 }
 func (w *Workload) GetLabel(label string) (string, bool) {
 	if v, ok := InspectWorkload(w.workload, "metadata", "labels", label); ok {
-		return v.(string), ok
+		if s, ok := v.(string); ok {
+			return s, true
+		}
 	}
 	return "", false
 }
 
 func (w *Workload) GetPodLabel(label string) (string, bool) {
 	if v, ok := InspectWorkload(w.workload, append(PodMetadata(w.GetKind()), "labels", label)...); ok && v != nil {
-		return v.(string), ok
+		if s, ok := v.(string); ok {
+			return s, true
+		}
 	}
 	return "", false
 }
@@ -398,7 +431,9 @@ func (w *Workload) GetInnerAnnotation(annotation string) (string, bool) {
 
 func (w *Workload) GetPodAnnotation(annotation string) (string, bool) {
 	if v, ok := InspectWorkload(w.workload, append(PodMetadata(w.GetKind()), "annotations", annotation)...); ok && v != nil {
-		return v.(string), ok
+		if s, ok := v.(string); ok {
+			return s, true
+		}
 	}
 	return "", false
 }
@@ -417,7 +452,9 @@ func (w *Workload) GetAnnotations() map[string]string {
 func (w *Workload) GetServiceAccountName() string {
 
 	if v, ok := InspectWorkload(w.workload, append(PodSpec(w.GetKind()), "serviceAccountName")...); ok && v != nil {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -534,13 +571,23 @@ func (w *Workload) GetOwnerReferences() ([]metav1.OwnerReference, error) {
 }
 func (w *Workload) GetResourceVersion() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "resourceVersion"); ok {
-		return v.(string)
+
+		if s, ok := v.(string); ok {
+
+			return s
+
+		}
 	}
 	return ""
 }
 func (w *Workload) GetUID() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "uid"); ok {
-		return v.(string)
+
+		if s, ok := v.(string); ok {
+
+			return s
+
+		}
 	}
 	return ""
 }
