@@ -58,7 +58,9 @@ func (b *BaseObject) GetObject() map[string]interface{} {
 }
 func (b *BaseObject) GetNamespace() string {
 	if v, ok := InspectWorkload(b.base, "metadata", "namespace"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -70,14 +72,18 @@ func (b *BaseObject) GetID() string {
 }
 func (b *BaseObject) GetName() string {
 	if v, ok := InspectWorkload(b.base, "metadata", "name"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
 
 func (b *BaseObject) GetApiVersion() string {
 	if v, ok := InspectWorkload(b.base, "apiVersion"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -104,7 +110,9 @@ func (b *BaseObject) GetGroup() string {
 
 func (b *BaseObject) GetKind() string {
 	if v, ok := InspectWorkload(b.base, "kind"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }

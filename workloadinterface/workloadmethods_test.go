@@ -607,3 +607,132 @@ func TestGetVolumes(t *testing.T) {
 	assert.Equal(t, 2, len(volumes))
 
 }
+
+func TestAccessorsWithNonStringMetadata(t *testing.T) {
+	// A manifest can be valid enough to be recognized as a workload and still
+	// carry a non-string value where a string is expected. The accessors used
+	// to assert the type outright and panic on such a document.
+	w, err := NewWorkload([]byte(`{
+		"apiVersion": ["oops"],
+		"kind": 1,
+		"metadata": {
+			"namespace": ["oops"],
+			"name": 42,
+			"generateName": ["oops"],
+			"resourceVersion": 7,
+			"uid": ["oops"],
+			"labels": {"app": ["nope"]},
+			"annotations": {"note": 7}
+		},
+		"spec": {
+			"selector": {"matchLabels": {"app": ["nope"], "tier": "web"}},
+			"template": {
+				"metadata": {
+					"labels": {"app": ["nope"]},
+					"annotations": {"note": 7}
+				},
+				"spec": {"serviceAccountName": ["oops"]}
+			}
+		}
+	}`))
+	assert.NoError(t, err)
+
+	for _, tc := range []struct {
+		name string
+		got  func(*Workload) string
+	}{
+		{"GetNamespace", (*Workload).GetNamespace},
+		{"GetName", (*Workload).GetName},
+		{"GetApiVersion", (*Workload).GetApiVersion},
+		{"GetKind", (*Workload).GetKind},
+		{"GetGenerateName", (*Workload).GetGenerateName},
+		{"GetResourceVersion", (*Workload).GetResourceVersion},
+		{"GetUID", (*Workload).GetUID},
+		{"GetServiceAccountName", (*Workload).GetServiceAccountName},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, "", tc.got(w))
+		})
+	}
+
+	assert.NotPanics(t, func() { _ = w.GetID() })
+
+	_, ok := w.GetLabel("app")
+	assert.False(t, ok)
+	_, ok = w.GetAnnotation("note")
+	assert.False(t, ok)
+	_, ok = w.GetPodLabel("app")
+	assert.False(t, ok)
+	_, ok = w.GetPodAnnotation("note")
+	assert.False(t, ok)
+
+	// the plural accessors read the same fields
+	assert.Equal(t, map[string]string{}, w.GetLabels())
+	assert.Equal(t, map[string]string{}, w.GetPodLabels())
+	assert.Equal(t, map[string]string{"note": "7"}, w.GetAnnotations())
+	assert.Equal(t, map[string]string{"note": "7"}, w.GetPodAnnotations())
+
+	// a mixed matchLabels keeps the string entry and drops the rest
+	selector, err := w.GetSelector()
+	assert.NoError(t, err)
+	assert.Equal(t, map[string]string{"tier": "web"}, selector.MatchLabels)
+}
+
+// TestContainersWithNonMapValues covers the case where the container itself is
+// not a map, rather than one of its values.
+func TestContainersWithNonMapValues(t *testing.T) {
+	w, err := NewWorkload([]byte(`{
+		"apiVersion": "apps/v1",
+		"kind": "Deployment",
+		"metadata": {"name": "x", "labels": ["oops"], "annotations": "oops"},
+		"data": "oops",
+		"spec": {
+			"selector": ["oops"],
+			"template": {"metadata": {"labels": "oops", "annotations": ["oops"]}}
+		}
+	}`))
+	assert.NoError(t, err)
+
+	assert.Nil(t, w.GetLabels())
+	assert.Nil(t, w.GetAnnotations())
+	assert.Nil(t, w.GetPodLabels())
+	assert.Nil(t, w.GetPodAnnotations())
+	assert.Nil(t, w.GetData())
+	assert.Nil(t, w.GetServiceSelector())
+}
+
+// TestSettersWithNonMapNode covers the write path: SetInMap used to test only
+// for presence, so an existing non-map node left it writing into a nil map.
+func TestSettersWithNonMapNode(t *testing.T) {
+	w, err := NewWorkload([]byte(`{
+		"apiVersion": "v1",
+		"kind": "Pod",
+		"metadata": "oops"
+	}`))
+	assert.NoError(t, err)
+
+	assert.NotPanics(t, func() { w.SetNamespace("default") })
+	assert.Equal(t, "default", w.GetNamespace())
+
+	assert.NotPanics(t, func() { w.SetLabel("app", "web") })
+	label, ok := w.GetLabel("app")
+	assert.True(t, ok)
+	assert.Equal(t, "web", label)
+
+	// an existing, valid map must not be replaced
+	w2, err := NewWorkload([]byte(`{
+		"apiVersion": "v1",
+		"kind": "Pod",
+		"metadata": {"name": "keep-me"}
+	}`))
+	assert.NoError(t, err)
+	w2.SetNamespace("default")
+	assert.Equal(t, "keep-me", w2.GetName())
+	assert.Equal(t, "default", w2.GetNamespace())
+
+	assert.NotPanics(t, func() { w.RemoveLabel("app") })
+}
+
+func TestIsTypeListWorkloadsWithNonStringKind(t *testing.T) {
+	assert.False(t, IsTypeListWorkloads(map[string]interface{}{"kind": 123}))
+}

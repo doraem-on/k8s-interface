@@ -23,15 +23,24 @@ func InspectMap(mapobject interface{}, scopes ...string) (val interface{}, k boo
 
 func SetInMap(workload map[string]interface{}, scope []string, key string, val interface{}) {
 	for i := range scope {
-		if _, ok := workload[scope[i]]; !ok {
-			workload[scope[i]] = make(map[string]interface{})
+		// look the node up and assert in one step: testing only for presence
+		// leaves workload nil when the node exists but is not a map, and the
+		// assignment below then panics.
+		if m, ok := workload[scope[i]].(map[string]interface{}); ok {
+			workload = m
+			continue
 		}
-		workload, _ = workload[scope[i]].(map[string]interface{})
+		next := make(map[string]interface{})
+		workload[scope[i]] = next
+		workload = next
 	}
 
 	workload[key] = val
 }
 
+// RemoveFromMap walks the same way SetInMap does, so a node that is present
+// but not a map leaves workload nil here too. That is harmless because delete
+// on a nil map is a no-op, but do not turn the delete into an assignment.
 func RemoveFromMap(workload map[string]interface{}, scope ...string) {
 	for i := 0; i < len(scope)-1; i++ {
 		if _, ok := workload[scope[i]]; ok {

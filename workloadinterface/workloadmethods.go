@@ -79,7 +79,6 @@ func (w *Workload) ToUnstructured() (*unstructured.Unstructured, error) {
 	}
 	if err := json.Unmarshal(bWorkload, obj); err != nil {
 		return obj, err
-
 	}
 
 	return obj, nil
@@ -130,8 +129,10 @@ func (w *Workload) RemovePodLabel(key string) {
 	w.RemoveMetadata(PodMetadata(w.GetKind()), "labels", key)
 }
 
+// RemoveMetadata walks the same way SetInMap does, so a node that is present
+// but not a map leaves workload nil. Reading from and deleting on a nil map are
+// both no-ops, so this stays safe as long as nothing here assigns into workload.
 func (w *Workload) RemoveMetadata(scope []string, metadata, key string) {
-
 	workload := w.workload
 	for i := range scope {
 		if _, ok := workload[scope[i]]; !ok {
@@ -146,7 +147,6 @@ func (w *Workload) RemoveMetadata(scope []string, metadata, key string) {
 
 	labels, _ := workload[metadata].(map[string]interface{})
 	delete(labels, key)
-
 }
 
 // ========================================= SET =========================================
@@ -204,7 +204,9 @@ func (w *Workload) GetObject() map[string]interface{} {
 }
 func (w *Workload) GetNamespace() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "namespace"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -216,21 +218,27 @@ func (w *Workload) GetID() string {
 }
 func (w *Workload) GetName() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "name"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
 
 func (w *Workload) GetData() map[string]interface{} {
 	if v, ok := InspectWorkload(w.workload, "data"); ok {
-		return v.(map[string]interface{})
+		if m, ok := v.(map[string]interface{}); ok {
+			return m
+		}
 	}
 	return nil
 }
 
 func (w *Workload) GetApiVersion() string {
 	if v, ok := InspectWorkload(w.workload, "apiVersion"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -257,7 +265,9 @@ func (w *Workload) GetGroup() string {
 
 func (w *Workload) GetGenerateName() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "generateName"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -284,15 +294,21 @@ func (w *Workload) GetReplicas() int {
 
 func (w *Workload) GetKind() string {
 	if v, ok := InspectWorkload(w.workload, "kind"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
 
 func (w *Workload) GetServiceSelector() map[string]string {
 	if v, ok := InspectWorkload(w.workload, "spec", "selector"); ok && v != nil {
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return nil
+		}
 		selector := make(map[string]string)
-		for k, i := range v.(map[string]interface{}) {
+		for k, i := range m {
 			selector[k] = fmt.Sprintf("%v", i)
 		}
 		return selector
@@ -306,7 +322,9 @@ func (w *Workload) GetSelector() (*metav1.LabelSelector, error) {
 		if m, ok := matchLabels.(map[string]interface{}); ok {
 			selector.MatchLabels = make(map[string]string, len(m))
 			for k, v := range m {
-				selector.MatchLabels[k] = v.(string)
+				if s, ok := v.(string); ok {
+					selector.MatchLabels[k] = s
+				}
 			}
 		}
 	}
@@ -324,34 +342,42 @@ func (w *Workload) GetSelector() (*metav1.LabelSelector, error) {
 
 func (w *Workload) GetAnnotation(annotation string) (string, bool) {
 	if v, ok := InspectWorkload(w.workload, "metadata", "annotations", annotation); ok {
-		return v.(string), ok
+		if s, ok := v.(string); ok {
+			return s, true
+		}
 	}
 	return "", false
 }
 func (w *Workload) GetLabel(label string) (string, bool) {
 	if v, ok := InspectWorkload(w.workload, "metadata", "labels", label); ok {
-		return v.(string), ok
+		if s, ok := v.(string); ok {
+			return s, true
+		}
 	}
 	return "", false
 }
 
 func (w *Workload) GetPodLabel(label string) (string, bool) {
 	if v, ok := InspectWorkload(w.workload, append(PodMetadata(w.GetKind()), "labels", label)...); ok && v != nil {
-		return v.(string), ok
+		if s, ok := v.(string); ok {
+			return s, true
+		}
 	}
 	return "", false
 }
 
 func (w *Workload) GetLabels() map[string]string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "labels"); ok && v != nil {
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return nil
+		}
 		labels := make(map[string]string)
-		for k, i := range v.(map[string]interface{}) {
-			// null labels will be ignored
-			if i == nil {
-				continue
+		for k, i := range m {
+			// null and non-string labels are ignored
+			if s, ok := i.(string); ok {
+				labels[k] = s
 			}
-
-			labels[k] = i.(string)
 		}
 		return labels
 	}
@@ -365,9 +391,16 @@ func (w *Workload) GetInnerLabels() map[string]string {
 
 func (w *Workload) GetPodLabels() map[string]string {
 	if v, ok := InspectWorkload(w.workload, append(PodMetadata(w.GetKind()), "labels")...); ok && v != nil {
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return nil
+		}
 		labels := make(map[string]string)
-		for k, i := range v.(map[string]interface{}) {
-			labels[k] = i.(string)
+		for k, i := range m {
+			// null and non-string labels are ignored
+			if s, ok := i.(string); ok {
+				labels[k] = s
+			}
 		}
 		return labels
 	}
@@ -382,8 +415,12 @@ func (w *Workload) GetInnerAnnotations() map[string]string {
 // GetPodAnnotations
 func (w *Workload) GetPodAnnotations() map[string]string {
 	if v, ok := InspectWorkload(w.workload, append(PodMetadata(w.GetKind()), "annotations")...); ok && v != nil {
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return nil
+		}
 		annotations := make(map[string]string)
-		for k, i := range v.(map[string]interface{}) {
+		for k, i := range m {
 			annotations[k] = fmt.Sprintf("%v", i)
 		}
 		return annotations
@@ -398,15 +435,21 @@ func (w *Workload) GetInnerAnnotation(annotation string) (string, bool) {
 
 func (w *Workload) GetPodAnnotation(annotation string) (string, bool) {
 	if v, ok := InspectWorkload(w.workload, append(PodMetadata(w.GetKind()), "annotations", annotation)...); ok && v != nil {
-		return v.(string), ok
+		if s, ok := v.(string); ok {
+			return s, true
+		}
 	}
 	return "", false
 }
 
 func (w *Workload) GetAnnotations() map[string]string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "annotations"); ok && v != nil {
+		m, ok := v.(map[string]interface{})
+		if !ok {
+			return nil
+		}
 		annotations := make(map[string]string)
-		for k, i := range v.(map[string]interface{}) {
+		for k, i := range m {
 			annotations[k] = fmt.Sprintf("%v", i)
 		}
 		return annotations
@@ -415,9 +458,10 @@ func (w *Workload) GetAnnotations() map[string]string {
 }
 
 func (w *Workload) GetServiceAccountName() string {
-
 	if v, ok := InspectWorkload(w.workload, append(PodSpec(w.GetKind()), "serviceAccountName")...); ok && v != nil {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -528,19 +572,22 @@ func (w *Workload) GetOwnerReferences() ([]metav1.OwnerReference, error) {
 	err = json.Unmarshal(ownerReferencesBytes, &ownerReferences)
 	if err != nil {
 		return ownerReferences, err
-
 	}
 	return ownerReferences, nil
 }
 func (w *Workload) GetResourceVersion() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "resourceVersion"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
 func (w *Workload) GetUID() string {
 	if v, ok := InspectWorkload(w.workload, "metadata", "uid"); ok {
-		return v.(string)
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -618,7 +665,6 @@ func (w *Workload) GetSecretsOfContainer() (map[string][]string, error) {
 				}
 			}
 		}
-
 	}
 	return secretsOfContainer, nil
 }
@@ -666,7 +712,6 @@ func (w *Workload) GetConfigMapsOfContainer() (map[string][]string, error) {
 				}
 			}
 		}
-
 	}
 	return configMapsOfContainer, nil
 }
