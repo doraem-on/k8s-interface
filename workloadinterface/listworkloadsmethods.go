@@ -40,11 +40,8 @@ func (lw *ListWorkloads) GetName() string {
 
 func (lw *ListWorkloads) GetKind() string {
 	if v, ok := InspectMap(lw.listWorkloads, "kind"); ok {
-
 		if s, ok := v.(string); ok {
-
 			return s
-
 		}
 	}
 	return ""
@@ -52,11 +49,8 @@ func (lw *ListWorkloads) GetKind() string {
 
 func (lw *ListWorkloads) GetApiVersion() string {
 	if v, ok := InspectMap(lw.listWorkloads, "apiVersion"); ok {
-
 		if s, ok := v.(string); ok {
-
 			return s
-
 		}
 	}
 	return ""
