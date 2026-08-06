@@ -117,14 +117,10 @@ func GetResourceNamesapcedScope() []string {
 // InitializeMapResources get supported api-resource (similar to 'kubectl api-resources') and map to 'ResourceGroupMapping' and 'ResourceNamesapcedScope'. If this function is not called, many functions may not work
 func InitializeMapResources(discoveryClient discovery.DiscoveryInterface) {
 
-	// load discovery data only if the map is empty
-	resourcesInfoLock.RLock()
-	resNsScopeLen := len(resourceNamesapcedScope)
-	resourcesInfoLock.RUnlock()
-	if resNsScopeLen != 0 {
-		return
-	}
-
+	// An explicitly supplied discovery client is authoritative: it belongs to a
+	// live cluster the caller has just initialized, so its discovery replaces
+	// whatever is cached. Otherwise a client built for a second cluster keeps
+	// resolving resources through the first cluster's snapshot.
 	if discoveryClient != nil {
 		resourceList, _ := discoveryClient.ServerPreferredResources()
 		if len(resourceList) != 0 {
@@ -133,11 +129,28 @@ func InitializeMapResources(discoveryClient discovery.DiscoveryInterface) {
 		}
 	}
 
+	// No usable client: keep the existing lazy behaviour and only populate when
+	// nothing has been loaded yet.
+	resourcesInfoLock.RLock()
+	resNsScopeLen := len(resourceNamesapcedScope)
+	resourcesInfoLock.RUnlock()
+	if resNsScopeLen != 0 {
+		return
+	}
+
 	// Fallback - load from mock
 	InitializeMapResourcesMock()
 
 }
+
+// setMapResources builds a fresh snapshot from resourceList and swaps it in, so
+// the globals describe exactly one cluster. Accumulating across calls would
+// produce a resource set that exists in neither cluster.
 func setMapResources(resourceList []*metav1.APIResourceList) {
+	newGroupMapping := map[string][]string{}
+	newNamespacedScope := []string{}
+	newClusterScope := []string{}
+
 	for i := range resourceList {
 		if resourceList[i] == nil {
 			continue
@@ -163,12 +176,11 @@ func setMapResources(resourceList []*metav1.APIResourceList) {
 
 			gvStr := JoinGroupVersion(gv.Group, gv.Version)
 
-			resourcesInfoLock.Lock()
 			// Append the group/version, deduping in case discovery returns the same
 			// (resource, group, version) tuple twice. Multiple groups serving the same
 			// resource name (e.g. "ingresses" in networking.k8s.io and extensions) are
 			// all preserved in insertion order.
-			existing := resourceGroupMapping[apiResource.Name]
+			existing := newGroupMapping[apiResource.Name]
 			alreadyPresent := false
 			for _, e := range existing {
 				if e == gvStr {
@@ -177,17 +189,23 @@ func setMapResources(resourceList []*metav1.APIResourceList) {
 				}
 			}
 			if !alreadyPresent {
-				resourceGroupMapping[apiResource.Name] = append(existing, gvStr)
+				newGroupMapping[apiResource.Name] = append(existing, gvStr)
 			}
 			if apiResource.Namespaced {
-				resourceNamesapcedScope = append(resourceNamesapcedScope, JoinResourceTriplets(gv.Group, gv.Version, apiResource.Name))
+				newNamespacedScope = append(newNamespacedScope, JoinResourceTriplets(gv.Group, gv.Version, apiResource.Name))
 			} else { // DEPRECATED
-				ResourceClusterScope = append(ResourceClusterScope, JoinResourceTriplets(gv.Group, gv.Version, apiResource.Name))
-
+				newClusterScope = append(newClusterScope, JoinResourceTriplets(gv.Group, gv.Version, apiResource.Name))
 			}
-			resourcesInfoLock.Unlock()
 		}
 	}
+
+	// Swap the whole snapshot in one critical section so readers never observe a
+	// partially rebuilt state.
+	resourcesInfoLock.Lock()
+	defer resourcesInfoLock.Unlock()
+	resourceGroupMapping = newGroupMapping
+	resourceNamesapcedScope = newNamespacedScope
+	ResourceClusterScope = newClusterScope
 }
 
 // IsKindKubernetes check if the kind is known to be a kubernetes kind. In this check we do not test the apiVersion
