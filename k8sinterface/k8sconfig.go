@@ -212,8 +212,25 @@ func GetCluster() *clientcmdapi.Cluster {
 
 }
 
-// SetClusterContextName set the name of desired cluster context. The package will use this name when loading the context
+// SetClusterContextName set the name of desired cluster context. The package will use this name when loading the context.
+//
+// If contextName differs from the currently set context, the cached client config
+// (K8SConfig, clientConfigAPI) is invalidated so the next GetK8sConfig/GetConfig call
+// reloads it for the new context instead of silently continuing to serve the previous
+// context's config. Without this, GetContextName() reports the new context while
+// GetK8sConfig() keeps returning the old one, since both LoadK8sConfig and GetConfig
+// only (re)load when their respective cache is nil (see #158). connectedToCluster is
+// reset to true so a load failure on the previous context does not suppress a retry
+// for the new one; IsConnectedToCluster re-derives it from the new load attempt.
+//
+// Repeated calls with the same contextName are a no-op here, same as before, so the
+// common single-cluster-per-process case keeps its caching benefit unchanged.
 func SetClusterContextName(contextName string) {
+	if contextName != clusterContextName {
+		K8SConfig = nil
+		clientConfigAPI = nil
+		connectedToCluster = true
+	}
 	clusterContextName = contextName
 }
 
