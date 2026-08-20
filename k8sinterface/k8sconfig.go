@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 
@@ -21,6 +22,34 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
+// stateMu guards every package-level variable below it: they record which
+// cluster/context this package is currently talking to, and are read and
+// written from the exported functions in this file (and
+// GetK8SServerGitVersion in k8sdiscovery.go). Without a lock, concurrent
+// calls into this package's API - e.g. two goroutines each driving their own
+// scan against a different context, as in kubescape's sequential
+// multi-context ("fleet scan") support - are a data race: go test -race
+// flags concurrent SetClusterContextName/GetContextName/IsConnectedToCluster
+// calls immediately (see #163).
+//
+// The functions below that touch this state are structured so the mutex is
+// only ever held by non-reentrant leaf operations: several exported
+// functions call each other (GetConfig calls SetClientConfigAPI,
+// IsConnectedToCluster calls LoadK8sConfig and SetConnectedToCluster, ...),
+// and sync.Mutex/RWMutex are not reentrant, so a naive Lock()/defer Unlock()
+// at the top of every exported function would deadlock the first time one
+// of them called another. Internal getX/setX helpers do the locking; the
+// exported functions call those instead of touching the variables or each
+// other while holding the lock. SetClusterContextName is the one exception:
+// its cache-invalidation logic is a single atomic check-then-update across
+// four variables, so it takes the lock directly for its whole body rather
+// than composing single-variable helpers.
+//
+// These variables stay exported for source compatibility, and to avoid
+// that, prefer the accessor functions in this file over reading/writing
+// them directly.
+var stateMu sync.RWMutex
+
 var connectedToCluster = true
 var clusterContextName = ""
 var ConfigClusterServerName = ""
@@ -29,6 +58,54 @@ var K8SGitServerVersion = ""
 // K8SConfig pointer to k8s config
 var K8SConfig *restclient.Config
 var clientConfigAPI *clientcmdapi.Config
+
+func getConnectedToCluster() bool {
+	stateMu.RLock()
+	defer stateMu.RUnlock()
+	return connectedToCluster
+}
+
+func getClusterContextName() string {
+	stateMu.RLock()
+	defer stateMu.RUnlock()
+	return clusterContextName
+}
+
+func getK8SConfig() *restclient.Config {
+	stateMu.RLock()
+	defer stateMu.RUnlock()
+	return K8SConfig
+}
+
+func setK8SConfig(c *restclient.Config) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+	K8SConfig = c
+}
+
+func getClientConfigAPILocked() *clientcmdapi.Config {
+	stateMu.RLock()
+	defer stateMu.RUnlock()
+	return clientConfigAPI
+}
+
+func setRunningIncluster(v bool) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+	RunningIncluster = v
+}
+
+func getK8SGitServerVersion() string {
+	stateMu.RLock()
+	defer stateMu.RUnlock()
+	return K8SGitServerVersion
+}
+
+func setK8SGitServerVersion(v string) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+	K8SGitServerVersion = v
+}
 
 // KubernetesApi -
 type KubernetesApi struct {
@@ -98,17 +175,17 @@ var RunningIncluster bool
 
 // LoadK8sConfig load config from local file or from cluster
 func LoadK8sConfig() error {
-	kubeconfig, err := config.GetConfigWithContext(clusterContextName)
+	kubeconfig, err := config.GetConfigWithContext(getClusterContextName())
 	if err != nil {
 		return fmt.Errorf("failed to load kubernetes config: %s", strings.ReplaceAll(err.Error(), "KUBERNETES_MASTER", "KUBECONFIG"))
 	}
 	if _, err := restclient.InClusterConfig(); err == nil {
-		RunningIncluster = true
+		setRunningIncluster(true)
 	} else {
-		RunningIncluster = false
+		setRunningIncluster(false)
 	}
 
-	K8SConfig = kubeconfig
+	setK8SConfig(kubeconfig)
 	return nil
 }
 
@@ -117,7 +194,7 @@ func GetK8sConfig() *restclient.Config {
 	if !IsConnectedToCluster() {
 		return nil
 	}
-	return K8SConfig
+	return getK8SConfig()
 }
 
 func GetContext() *clientcmdapi.Context {
@@ -126,7 +203,7 @@ func GetContext() *clientcmdapi.Context {
 		return nil
 	}
 
-	contextName := clusterContextName
+	contextName := getClusterContextName()
 	if contextName == "" {
 		// if context name is not set, use the current context
 		contextName = kubeConfig.CurrentContext
@@ -140,21 +217,23 @@ func GetContext() *clientcmdapi.Context {
 }
 
 func SetClientConfigAPI(conf *clientcmdapi.Config) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
 	clientConfigAPI = conf
 }
 
 func IsConnectedToCluster() bool {
-	if K8SConfig == nil {
+	if getK8SConfig() == nil {
 		if err := LoadK8sConfig(); err != nil {
 			SetConnectedToCluster(false)
 		}
 	}
-	return connectedToCluster
+	return getConnectedToCluster()
 }
 
 func GetContextName() string {
-	if clusterContextName != "" {
-		return clusterContextName
+	if name := getClusterContextName(); name != "" {
+		return name
 	}
 
 	if config := GetConfig(); config != nil {
@@ -167,14 +246,14 @@ func GetContextName() string {
 // get config from ~/.kube/config
 func GetConfig() *clientcmdapi.Config {
 
-	if !connectedToCluster {
+	if !getConnectedToCluster() {
 		return nil
 	}
-	if clientConfigAPI != nil {
-		return clientConfigAPI
+	if conf := getClientConfigAPILocked(); conf != nil {
+		return conf
 	}
 
-	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{CurrentContext: clusterContextName})
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{CurrentContext: getClusterContextName()})
 	config, err := kubeConfig.RawConfig()
 	if err != nil {
 		return nil
@@ -226,6 +305,8 @@ func GetCluster() *clientcmdapi.Cluster {
 // Repeated calls with the same contextName are a no-op here, same as before, so the
 // common single-cluster-per-process case keeps its caching benefit unchanged.
 func SetClusterContextName(contextName string) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
 	if contextName != clusterContextName {
 		K8SConfig = nil
 		clientConfigAPI = nil
@@ -235,10 +316,12 @@ func SetClusterContextName(contextName string) {
 }
 
 func SetK8SGitServerVersion(K8SGitServerVersionInput string) {
-	K8SGitServerVersion = K8SGitServerVersionInput
+	setK8SGitServerVersion(K8SGitServerVersionInput)
 }
 
 func SetConfigClusterServerName(contextName string) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
 	ConfigClusterServerName = contextName
 }
 
@@ -256,9 +339,13 @@ func GetK8sConfigClusterServerName() string {
 	}
 
 	// return current context in case the server name is not available
+	stateMu.RLock()
+	defer stateMu.RUnlock()
 	return ConfigClusterServerName
 }
 
 func SetConnectedToCluster(isConnected bool) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
 	connectedToCluster = isConnected
 }
